@@ -1,3 +1,17 @@
+# ==========================
+#  Streamlit
+# ==========================
+
+# Secretos locales (NO subir nunca)
+secrets.toml
+
+# Config local
+.streamlit/config.toml
+
+# Directorio temporal de Streamlit
+.streamlit/**/static/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
