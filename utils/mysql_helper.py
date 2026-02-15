@@ -6,12 +6,13 @@ import numpy as np
 from tqdm import tqdm
 import re
 import streamlit as st
+from utils.auth import Auth
+
 
 HOST = st.secrets["HOST"]
 USER = st.secrets["USER"]
 PASSWORD = st.secrets["PASSWORD"]
 DATABASE = st.secrets["DATABASE"]
-
 
 class MySQLBulkLoader:
     """

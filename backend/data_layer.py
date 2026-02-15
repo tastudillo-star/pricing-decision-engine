@@ -4,7 +4,7 @@ from typing import Optional
 import pandas as pd
 
 from utils.mysql_helper import execute_mysql_query
-
+from backend.schemas import coerce_by_name
 
 def _run_query(sql: str) -> pd.DataFrame:
     """
@@ -57,7 +57,8 @@ def get_sku() -> pd.DataFrame:
         id_segmento
     FROM sku
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "sku")
 
 def get_categoria() -> pd.DataFrame:
     """
@@ -73,7 +74,8 @@ def get_categoria() -> pd.DataFrame:
         id_macro
     FROM categoria
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "categoria")
 
 def get_macro_categoria() -> pd.DataFrame:
     """
@@ -88,7 +90,8 @@ def get_macro_categoria() -> pd.DataFrame:
         nombre
     FROM macro_categoria
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "macro_categoria")
 
 def get_proveedor() -> pd.DataFrame:
     """
@@ -103,7 +106,8 @@ def get_proveedor() -> pd.DataFrame:
         nombre
     FROM proveedor
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "proveedor")
 
 def get_competidor() -> pd.DataFrame:
     """
@@ -118,7 +122,8 @@ def get_competidor() -> pd.DataFrame:
         nombre
     FROM competidor
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "competidor")
 
 
 # Vetnas y precios
@@ -167,7 +172,8 @@ def get_ventas(
     FROM ventas_chiper
     {where_sql}
     """
-    return _run_query(sql)
+    df =  _run_query(sql)
+    return coerce_by_name(df, "ventas")
 
 def get_precio_competidor(
         fecha_inicio: Optional[str] = None,
@@ -210,7 +216,8 @@ def get_precio_competidor(
     FROM precio_competidor
     {where_sql}
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "precio_competidor")
 
 
 # Reglas de negocio y segmentos
@@ -227,7 +234,8 @@ def get_segmento() -> pd.DataFrame:
         nombre
     FROM segmento
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "segmento")
 
 def get_regla_negocio() -> pd.DataFrame:
     """
@@ -246,7 +254,8 @@ def get_regla_negocio() -> pd.DataFrame:
         GROUP BY id_segmento
     ) latest ON rn.id_segmento = latest.id_segmento AND rn.fecha = latest.max_fecha
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "regla_negocio")
 
 def get_regla_negocio_override() -> pd.DataFrame:
     """
@@ -265,5 +274,6 @@ def get_regla_negocio_override() -> pd.DataFrame:
         GROUP BY id_sku
     ) latest ON ro.id_sku = latest.id_sku AND ro.fecha = latest.max_fecha
     """
-    return _run_query(sql)
+    df = _run_query(sql)
+    return coerce_by_name(df, "regla_negocio_override")
 
