@@ -2,6 +2,10 @@
 #  Streamlit
 # ==========================
 
+# Syncthing
+.stfolder/
+
+
 # Secretos locales (NO subir nunca)
 secrets.toml
 
