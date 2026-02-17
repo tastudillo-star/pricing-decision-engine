@@ -13,13 +13,14 @@ class SKUSet:
     df_skus: Optional[pd.DataFrame] = None
 
     # caches
-    df_ventas: Optional[pd.DataFrame] = None
-    df_posicionamiento: Optional[pd.DataFrame] = None
-    df_reglas: Optional[pd.DataFrame] = None
-    df_override: Optional[pd.DataFrame] = None
-
     fecha_inicio: Optional[str] = None
     fecha_fin: Optional[str] = None
+
+    df_ventas: Optional[pd.DataFrame] = None
+    df_reglas: Optional[pd.DataFrame] = None
+    df_master: Optional[pd.DataFrame] = None
+
+    posicionamiento: Optional[float] = None
 
     def __str__(self) -> str:
         return f"SKUSet(name={self.name})"
@@ -59,24 +60,53 @@ class SKUSet:
         obj.fecha_fin = fecha_fin
         return obj
 
-    def get_posicionamiento(self, competidor_id=None):
+    def get_df_posicionamiento(self, competidor_id=None):
         df_competidor = db.get_precio_competidor(self.fecha_inicio, self.fecha_fin, competidor_id)
         df_competidor.drop(columns=['id'], inplace=True)
         ## aqui revisar ventas sino pedir [futuro]
-        df_merged = self.df_ventas.merge(
+        df_master = self.df_ventas.merge(
             df_competidor,
             on=['id_sku', 'fecha'],
             how='inner'
         )
-        # Guardrail por ratio contra precio_bruto (0.5x a 2.0x)
-        ratio = df_merged["precio_descuento"] / df_merged["precio_bruto"]
-        df_merged = df_merged[(ratio >= 0.5) & (ratio <= 2.0)]
-        # Cáclulo de la columna posicionamiento usando precio_descuento
-        df_merged['posicionamiento'] = df_merged['precio_bruto'].div(df_merged['precio_descuento'])
-        self.df_posicionamiento = df_merged[['id_sku', 'fecha', 'posicionamiento', 'id_competidor']].copy()
-        del df_competidor, df_merged
 
-        return self.df_posicionamiento
+        # Filtra el DataFrame para mantener solo filas cuyo `posicionamiento` sea
+        # estrictamente mayor que 0.5 y estrictamente menor que 2.0.
+        # - Se conserva únicamente `posicionamiento` numérico en el intervalo abierto (0.5, 2.0).
+        # - Cualquier `NaN` / `pd.NA` en `posicionamiento` queda excluido porque las comparaciones no son True.
+        # - Valores iguales a 0.5 o 2.0, valores negativos o cero también quedan fuera (la comparación es estricta).
+        # - Si `posicionamiento` se generó usando denominadores reemplazados por `pd.NA` cuando eran 0, esas filas tendrán `NA` y se descartarán aquí.
+        # - Como efecto práctico, la suma de `venta_neta` tras este filtro refleja solo las ventas de las filas dentro de ese rango.
+        df_master["posicionamiento"] = (
+                df_master[["precio_bruto", "precio_bruto_descuento"]].min(axis=1) / df_master[
+            ["precio_lleno", "precio_descuento"]].min(axis=1).replace(0, pd.NA)
+        )
+        df_master = df_master[(df_master['posicionamiento'] > 0.5) & (df_master['posicionamiento'] < 2.0)]
+
+        # Agrupamos fechas y ponderamos por venta
+        def promedio_ponderado(g, valor_pesos):
+            return (g * valor_pesos).sum() / valor_pesos.sum() if valor_pesos.sum() != 0 else pd.NA
+
+        def agrupacion_posicionamiento(g):
+            return pd.Series({
+                'cantidad': g['cantidad'].sum(),
+                'venta_neta': g['venta_neta'].sum(),
+                'ganancia_neta': g['ganancia_neta'].sum(),
+                'iva': promedio_ponderado(g['iva'], g['venta_neta']),
+                'front': promedio_ponderado(g['front'], g['venta_neta']),
+                'back': promedio_ponderado(g['back'], g['venta_neta']),
+                'precio_neto': promedio_ponderado(g['precio_neto'], g['venta_neta']),
+                'precio_bruto': promedio_ponderado(g['precio_bruto'], g['venta_neta']),
+                'precio_bruto_descuento': promedio_ponderado(g['precio_bruto_descuento'], g['venta_neta']),
+                'precio_lleno': promedio_ponderado(g['precio_lleno'], g['venta_neta']),
+                'posicionamiento': promedio_ponderado(g['posicionamiento'], g['venta_neta']),
+            })
+
+        df_master = df_master.groupby("id_sku").apply(agrupacion_posicionamiento).reset_index()
+
+        self.df_master = df_master.copy()
+        del df_master, df_competidor
+        return True
 
     def get_reglas(self, override_reglas=True):
 
@@ -128,95 +158,15 @@ class SKUSet:
 
         return self.df_reglas
 
-    def get_master_pos(
-        self,
-        competidor_id=None
-    ) -> float:
+    def get_posicionamiento(self, competidor_id=None) -> float:
         if self.df_ventas is None:
             raise ValueError("Debe cargar las ventas primero usando from_ventas()")
-        if self.df_posicionamiento is None:
+        if self.df_master is None:
             self.get_posicionamiento(competidor_id)
 
-        # df_master IMPORTANTE
-        df_master = self.df_ventas.merge(
-            self.df_posicionamiento,
-            on=['id_sku', 'fecha'],
-            how='left'
-        )
-        # Filtro por ventas y pos válido
-        df_master = df_master[df_master['venta_neta'].notna() & (df_master['venta_neta'] > 0)]
-        df_master = df_master.dropna(subset=["posicionamiento", "id_competidor"])
+        # Calculamos posicionamiento promedio ponderado por venta_neta
+        df_master = self.df_master
+        self.posicionamiento = (df_master['posicionamiento'] * df_master['venta_neta']).sum() / df_master['venta_neta'].sum()
 
-        # KPIS
-        df = df_master.copy()
-
-        # 2) Venta por SKU-día (para no duplicarla por competidor)
-        venta_sku_dia = (
-            df.groupby(["fecha", "id_sku"], as_index=False)
-            .agg(venta_neta=("venta_neta", "first"))  # si es duplicada idéntica por join; si no, usa "sum"
-        )
-
-        # 3) Posicionamiento máximo por SKU-día entre competidores
-        pos_max_sku_dia = (
-            df.groupby(["fecha", "id_sku"], as_index=False)
-            .agg(pos_max=("posicionamiento", "max"))
-        )
-
-        # 4) Join y promedio ponderado total
-        m = venta_sku_dia.merge(pos_max_sku_dia, on=["fecha", "id_sku"], how="inner")
-        pos_total = (m["pos_max"] * m["venta_neta"]).sum() / m["venta_neta"].sum()
-
-        return pos_total
-
-    def get_master_pos_v2(
-        self,
-        competidor_id=None
-    ) -> float:
-        if self.df_ventas is None:
-            raise ValueError("Debe cargar las ventas primero usando from_ventas()")
-        if self.df_posicionamiento is None:
-            self.get_posicionamiento(competidor_id)
-
-        # df_master IMPORTANTE
-        df_master = self.df_ventas.merge(
-            self.df_posicionamiento,
-            on=['id_sku', 'fecha'],
-            how='left'
-        )
-        # Filtro por ventas y pos válido
-        df_master = df_master[df_master['venta_neta'].notna() & (df_master['venta_neta'] > 0)]
-        df_master = df_master.dropna(subset=["posicionamiento"])
-
-        # KPIS
-        df = df_master.copy()
-
-        pos = (df['posicionamiento'] * df['venta_neta']).sum() / df['venta_neta'].sum()
-
-        print(df)
-        print(len(df))
-        print(pos)
-
-        venta = df['venta_neta'].sum()
-        print(f"Venta total: {venta}")
-
-
-        # 2) Venta por SKU-día (para no duplicarla por competidor)
-        venta_sku_dia = (
-            df.groupby(["fecha", "id_sku"], as_index=False)
-            .agg(venta_neta=("venta_neta", "first"))  # si es duplicada idéntica por join; si no, usa "sum"
-        )
-
-        # 3) Posicionamiento máximo por SKU-día entre competidores
-        pos_max_sku_dia = (
-            df.groupby(["fecha", "id_sku"], as_index=False)
-            .agg(pos_max=("posicionamiento", "mean"))
-        )
-
-        # 4) Join y promedio ponderado total
-        m = venta_sku_dia.merge(pos_max_sku_dia, on=["fecha", "id_sku"], how="inner")
-
-        pos_total = (m["pos_max"] * m["venta_neta"]).sum() / m["venta_neta"].sum()
-
-        return pos_total
-
+        return self.posicionamiento
 
