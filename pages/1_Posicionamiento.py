@@ -96,8 +96,6 @@ def display_page(df_consolidado, ventanas_skuset):
     with col13:
         st.metric('Margen ponderado:', f"{skuset.margen:.2%}")
 
-    st.dataframe(skuset.master)
-
     cfg = ScatterConfig(
         # optional overrides
         x_ref=100.0,
@@ -108,16 +106,14 @@ def display_page(df_consolidado, ventanas_skuset):
     fig = component.render()
     st.plotly_chart(fig, width='stretch')
 
-
-
 #=============================================================================
 # CONFIGURACIÓN DE PÁGINA Y CONTROLES
 #=============================================================================
 print('Iniciando página Master Posicionamiento')
 st.header("Master Posicionamiento")
 
-#auth = Auth()
-#auth.require_page()
+auth = Auth()
+auth.require_page()
 
 # Parámetros
 st.sidebar.subheader("Parámetros")
@@ -163,17 +159,17 @@ id_competidor = st.sidebar.selectbox(
     format_func=lambda x: f"{x} – {COMPETIDORES.get(x, 'Competidor')}",
     index=3,
 )
-
+msg = st.empty()
+msg.warning("Presiona el botón 'Cargar datos' para iniciar la carga y visualización. La primera carga puede tardar unos segundos.")
 # Button para cargar datos
 if st.sidebar.button("Cargar datos"):
     st.cache_data.clear()
+    msg.empty()
+    df_consolidado, ventanas_skuset = load_data(
+        fecha_fin=fecha_fin,
+        num_ventanas=int(num_ventanas),
+        tamano_ventana_dias=int(tamano_ventana),
+        id_competidor=id_competidor
+    )
+    display_page(df_consolidado, ventanas_skuset)
 
-# Modo múltiples ventanas
-df_consolidado, ventanas_skuset = load_data(
-    fecha_fin=fecha_fin,
-    num_ventanas=int(num_ventanas),
-    tamano_ventana_dias=int(tamano_ventana),
-    id_competidor=id_competidor
-)
-
-display_page(df_consolidado, ventanas_skuset)

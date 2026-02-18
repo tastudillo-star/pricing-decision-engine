@@ -160,13 +160,14 @@ class ScatterPosMargen:
 
         # Obtener group_by del estado
         group_by = self._col_to_groupby(state.get("group_by", self._map_groupby_to_col(self.cfg.default_groupby)))
+        show_trails = state.get("show_trails", self.cfg.show_trails)
 
         # Agregar
         df_agg = self._aggregate(df_f, group_by=group_by)
         self._df_agg = df_agg.copy()
 
         # Construir figura
-        fig = self._build_figure(df_agg, group_by=group_by)
+        fig = self._build_figure(df_agg, group_by=group_by, show_trails=show_trails)
         return fig
 
     def get_filtered_df(self) -> pd.DataFrame:
@@ -270,7 +271,7 @@ class ScatterPosMargen:
 
         # UI Header
         with st.container():
-            top_cols = st.columns([1.5, 1.0, 1.0], gap="large")
+            top_cols = st.columns([1.5, 1.0, 1.0, 1.0], gap="large")
 
             with top_cols[0]:
                 default_idx = 0
@@ -290,12 +291,24 @@ class ScatterPosMargen:
                 st.caption(f"Filas: {len(df):,}".replace(",", "."))
 
             with top_cols[2]:
+                # Checkbox para mostrar/ocultar trails (solo si hay columna ventana)
+                has_window_col = cfg.window_col in df.columns
+                if has_window_col:
+                    show_trails = st.checkbox(
+                        "Mostrar trayectoria",
+                        value=cfg.show_trails,
+                        key=f"{key_prefix}__show_trails",
+                    )
+                else:
+                    show_trails = False
+
+            with top_cols[3]:
                 if st.button("Limpiar filtros", key=f"{key_prefix}__clear_filters"):
                     self._clear_filter_state(filter_cols, key_prefix=key_prefix)
                     st.rerun()
 
         # Filtros multiselect en grid
-        state: Dict[str, Any] = {"group_by": group_by, "filters": {}}
+        state: Dict[str, Any] = {"group_by": group_by, "show_trails": show_trails, "filters": {}}
 
         ncols = 4
         cols_ui = st.columns(ncols, gap="medium")
@@ -494,8 +507,12 @@ class ScatterPosMargen:
     # -----------------------------
     # Figure
     # -----------------------------
-    def _build_figure(self, df_agg: pd.DataFrame, *, group_by: str) -> go.Figure:
+    def _build_figure(self, df_agg: pd.DataFrame, *, group_by: str, show_trails: bool = None) -> go.Figure:
         cfg = self.cfg
+
+        # Si no se especifica show_trails, usar el valor de configuración
+        if show_trails is None:
+            show_trails = cfg.show_trails
 
         if df_agg is None or df_agg.empty:
             fig = go.Figure()
@@ -637,7 +654,7 @@ class ScatterPosMargen:
         )
 
         # --- Trails (trayectorias históricas) ---
-        if has_window and cfg.show_trails and df_all is not None:
+        if has_window and show_trails and df_all is not None:
             df_trails: pd.DataFrame = df_all
             unique_groups = df_trails["group_key"].unique()
             draw_trails = len(unique_groups) <= cfg.max_trail_groups
