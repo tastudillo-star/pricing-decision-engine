@@ -8,7 +8,7 @@ FECHA_FIN = "2026-02-08"
 ID_COMPETIDOR = 1
 
 print('Hola mundo')
-skuset = SKUSet.from_ventas(
+skuset = SKUSet.build_master(
     fecha_inicio=str(FECHA_INICIO),
     fecha_fin=str(FECHA_FIN),
 )
