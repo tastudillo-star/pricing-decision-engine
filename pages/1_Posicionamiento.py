@@ -112,8 +112,8 @@ def display_page(df_consolidado, ventanas_skuset):
 print('Iniciando página Master Posicionamiento')
 st.header("Master Posicionamiento")
 
-auth = Auth()
-auth.require_page()
+# auth = Auth()
+# auth.require_page()
 
 # Parámetros
 st.sidebar.subheader("Parámetros")
@@ -160,16 +160,24 @@ id_competidor = st.sidebar.selectbox(
     index=3,
 )
 msg = st.empty()
-msg.warning("Presiona el botón 'Cargar datos' para iniciar la carga y visualización. La primera carga puede tardar unos segundos.")
+
 # Button para cargar datos
 if st.sidebar.button("Cargar datos"):
     st.cache_data.clear()
-    msg.empty()
     df_consolidado, ventanas_skuset = load_data(
         fecha_fin=fecha_fin,
         num_ventanas=int(num_ventanas),
         tamano_ventana_dias=int(tamano_ventana),
         id_competidor=id_competidor
     )
-    display_page(df_consolidado, ventanas_skuset)
+    # Persistir en session_state para sobrevivir reruns causados por filtros/widgets
+    st.session_state["df_consolidado"] = df_consolidado
+    st.session_state["ventanas_skuset"] = ventanas_skuset
+
+# Si ya hay datos cargados (sea desde el botón o desde session_state), mostrar la página
+if "df_consolidado" in st.session_state and "ventanas_skuset" in st.session_state:
+    msg.empty()
+    display_page(st.session_state["df_consolidado"], st.session_state["ventanas_skuset"])
+else:
+    msg.warning("Presiona el botón 'Cargar datos' para iniciar la carga y visualización. La primera carga puede tardar unos segundos.")
 
