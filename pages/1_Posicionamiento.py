@@ -112,8 +112,8 @@ def display_page(df_consolidado, ventanas_skuset):
 print('Iniciando página Master Posicionamiento')
 st.header("Master Posicionamiento")
 
-# auth = Auth()
-# auth.require_page()
+auth = Auth()
+auth.require_page()
 
 # Parámetros
 st.sidebar.subheader("Parámetros")
